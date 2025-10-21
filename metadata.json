@@ -1,0 +1,8 @@
+{
+  "name": "AI Interview Coach",
+  "description": "A production-ready AI-Powered Interview Coach web application that helps job seekers prepare for interviews with personalized, AI-generated questions and feedback.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
