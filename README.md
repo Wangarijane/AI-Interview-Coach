@@ -14,7 +14,7 @@ Powered by Google's Gemini models, a Node.js backend, and a Firestore database, 
     - **Classic Mode**: Answer pre-generated questions one-by-one via text or voice. Receive detailed, structured feedback on each answer.
     - **Live Mode**: Engage in a real-time, low-latency voice conversation with an AI interviewer that mimics a real video interview.
 - **Deep Personalization**:
-    - Upload your resume (`.txt`) to receive questions tailored specifically to your experience.
+    - Upload your resume (`.txt`, `.pdf`, `.docx`) to receive questions tailored specifically to your experience.
     - Choose from multiple AI interviewer personas (e.g., Friendly, Strict, HR Screener) to simulate different interview styles.
 - **Comprehensive AI-Powered Feedback**:
     - **Classic Mode**: Get a score (1-10), strengths, areas for improvement, suggested answer structures, and key points missed for every question.
@@ -121,39 +121,44 @@ Follow these steps to run the full-stack application on your local machine.
 
 - Node.js (v18 or later)
 - pnpm
-- A Google Cloud Project
+- A Google Cloud Project with Billing enabled.
 - A Google Gemini API Key.
-- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) authenticated (`gcloud auth application-default login`).
+- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) installed and configured.
+    - **Verify installation** by running `gcloud --version` in your terminal.
+    - **Log in to the CLI** by running `gcloud auth login`.
+    - **Set your project** by running `gcloud config set project YOUR_PROJECT_ID`.
 
-### Installation & Setup
+### 1. Configure Your Google Cloud & Firebase Project
 
-1.  **Configure Your Google Cloud & Firebase Project:**
-    - In your [Firebase Console](https://console.firebase.google.com/), select your Google Cloud project.
-    - **Authentication:**
-        - Navigate to **Authentication** -> **Sign-in method** and ensure the **Google** provider is enabled.
-        - **Crucially, you must authorize your development domain.** Go to **Authentication** -> **Settings** -> **Authorized domains**. Click **Add domain** and enter `localhost`. This allows Google Sign-In to work from your local server.
-    - **Firestore:**
-        - Navigate to **Firestore Database** and create a database in Native mode.
+- In your [Firebase Console](https://console.firebase.google.com/), select your Google Cloud project.
+- **Authentication:**
+    - Go to **Authentication** -> **Sign-in method** and ensure the **Google** provider is enabled.
+    - **Crucially, authorize your development domain.** Go to **Authentication** -> **Settings** -> **Authorized domains**. Click **Add domain** and enter `localhost`.
+- **Firestore:**
+    - Go to **Firestore Database** and create a database in **Native mode**. Choose a region close to you.
 
-2.  **Clone the repository and install dependencies:**
-    ```bash
-    git clone <your-repo-url>
-    cd <repo-directory>
-    pnpm install # Installs dependencies for both frontend and backend
-    ```
+### 2. Clone the repository and install dependencies
+```bash
+git clone <your-repo-url>
+cd <repo-directory>
+pnpm install # Installs dependencies for both frontend and backend
+```
 
-3.  **Set up Backend environment:**
-    Create a file named `backend/.env` and add your configuration:
+### 3. Set up Environment Variables
+
+- Create a file named `backend/.env`. A `.gitignore` file is included in the `backend` directory to prevent this file from being committed.
     ```
     # Your Google Gemini API Key
     API_KEY="your_gemini_api_key_here"
 
     # Your Google Cloud Project ID
     GCLOUD_PROJECT="your-gcp-project-id"
+
+    # (Optional) See Authentication Step 4 for details on this variable
+    # GOOGLE_APPLICATION_CREDENTIALS="./your-service-account-key.json"
     ```
 
-4.  **Set up Frontend environment:**
-    Create a file named `frontend/.env` and add your Firebase and backend configuration. You can find your Firebase config in your Firebase project settings under "Web app".
+- Create a file named `frontend/.env`. You can find your Firebase config in your Firebase project settings ("Project settings" > "General" > "Your apps" > "Web app").
     ```
     # The URL for the backend API endpoint
     VITE_API_URL="http://localhost:8080/api"
@@ -170,17 +175,78 @@ Follow these steps to run the full-stack application on your local machine.
     VITE_FIREBASE_APP_ID="your_app_id"
     ```
 
-5.  **Run the development servers:**
-    Open two terminal windows.
-    - In terminal 1, run the **backend**:
-      ```bash
-      pnpm --filter backend start
+### 4. Authenticate Your Local Backend (Crucial Step)
+
+The backend needs credentials to securely connect to Google Cloud services like Firestore. This is the most common point of failure during setup. Please follow **one** of the two methods below carefully.
+
+---
+
+#### **Method 1: Using the gcloud CLI (Recommended)**
+
+This method uses your personal Google Cloud account credentials and is the quickest way to get started.
+
+1.  **Run the Login Command:** In your terminal, run:
+    ```bash
+    gcloud auth application-default login
+    ```
+2.  **Follow Browser Prompts:** This command will open a browser window. Sign in with the Google account that has access to your Cloud project.
+3.  **Verification:** The CLI securely stores a credential file on your system. The backend will automatically find and use these credentials. There is **no need** to set `GOOGLE_APPLICATION_CREDENTIALS` in your `.env` file with this method.
+
+**Troubleshooting Method 1:**
+- **"I still see the authentication error!"**
+    - Make sure you are logged into the correct Google account with access to the project.
+    - Ensure you have set your active project in the gcloud CLI by running `gcloud config set project YOUR_PROJECT_ID`.
+    - Try running `gcloud auth application-default revoke` and then running the `login` command again.
+
+---
+
+#### **Method 2: Using a Service Account Key File (Alternative)**
+
+This method uses a dedicated, non-human account. It's more explicit and can bypass potential issues with your local `gcloud` configuration.
+
+1.  **Create a Service Account:**
+    - In the Google Cloud Console, go to **IAM & Admin** > **Service Accounts**.
+    - Click **+ CREATE SERVICE ACCOUNT**.
+    - Give it a name (e.g., `ai-coach-local-dev`) and click **CREATE AND CONTINUE**.
+    - Grant it the following two roles:
+        - `Cloud Datastore User` (allows access to Firestore)
+        - `Firebase Authentication Admin` (allows verifying user tokens)
+    - Click **DONE**.
+
+2.  **Generate and Download a Key:**
+    - Find your new service account in the list. Click the three-dot menu under **Actions** and select **Manage keys**.
+    - Click **ADD KEY** -> **Create new key**. Choose **JSON** and click **CREATE**. A JSON key file will be downloaded.
+
+3.  **Configure the Backend:**
+    - **Move the downloaded JSON file** into the `backend` directory.
+    - **Rename the file** to something simple, like `service-account-key.json`.
+    - **Open `backend/.env`** and add/uncomment the `GOOGLE_APPLICATION_CREDENTIALS` variable, setting its value to the path of your key file:
       ```
-    - In terminal 2, run the **frontend**:
-      ```bash
-      pnpm --filter frontend start
+      # Path to your service account key file for local development
+      GOOGLE_APPLICATION_CREDENTIALS="./service-account-key.json"
       ```
-    The application will be available at `http://localhost:3000` (or your Vite dev server port).
+      > The provided `.gitignore` file will prevent this key from being accidentally committed.
+
+---
+
+### 5. Run the Application
+
+Once you have completed the authentication setup, you can run the application. Open two separate terminals.
+
+-   In **Terminal 1**, run the **backend**:
+    ```bash
+    pnpm --filter backend start
+    ```
+    > **On success**, you should see "Firebase Admin SDK initialized successfully."
+    > **If you see an auth error**, please revisit Step 4.
+
+-   In **Terminal 2**, run the **frontend**:
+    ```bash
+    pnpm --filter frontend start
+    ```
+
+The application will be available at `http://localhost:5173`.
+
 
 ## Deployment to Google Cloud Run
 

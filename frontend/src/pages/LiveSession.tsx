@@ -9,7 +9,7 @@ import { useAuth } from '../hooks/useAuth';
 import Card from '../components/common/Card';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
-import { Mic, PhoneOff, Bot, User, CameraOff, AlertCircle, ThumbsUp, ThumbsDown, Award, Eye, MessageSquare } from 'lucide-react';
+import { Mic, PhoneOff, Bot, User, Camera, CameraOff, AlertCircle, ThumbsUp, ThumbsDown, Award, Eye, MessageSquare } from 'lucide-react';
 
 // Audio/Video Constants
 const INPUT_SAMPLE_RATE = 16000;
@@ -344,10 +344,31 @@ const LiveSession: React.FC = () => {
                 return <LoadingSpinner text="Waiting for permissions..." />;
             case 'ready':
                 return (
-                     <div className="text-center p-6 bg-black bg-opacity-70 rounded-lg">
-                        <h2 className="text-2xl font-semibold mb-3 text-white">Ready to Start!</h2>
-                        <p className="text-gray-300 mb-6">The AI interviewer is waiting for you.</p>
-                        <button onClick={handleStartSession} className="px-6 py-3 font-semibold text-white bg-green-600 rounded-lg shadow-md hover:bg-green-700 transition">
+                    <div className="text-center p-6 bg-black bg-opacity-70 rounded-lg max-w-lg mx-auto">
+                        <h2 className="text-2xl font-semibold mb-3 text-white">You're All Set!</h2>
+                        <p className="text-gray-300 mb-6">
+                            Get ready for a real-time conversational interview. The AI will ask questions and provide feedback on both your answers and your non-verbal cues.
+                        </p>
+
+                        <div className="text-left space-y-4 my-8 text-gray-200">
+                            <h3 className="text-lg font-semibold text-white text-center">Tips for the Best Experience</h3>
+                            <div className="flex items-start gap-4">
+                                <Camera className="w-6 h-6 text-primary-400 mt-1 flex-shrink-0" />
+                                <div>
+                                    <h4 className="font-semibold">Camera Positioning</h4>
+                                    <p className="text-sm text-gray-300">Sit in a well-lit area. Make sure your face is clearly visible and centered in the frame.</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start gap-4">
+                                <Mic className="w-6 h-6 text-primary-400 mt-1 flex-shrink-0" />
+                                <div>
+                                    <h4 className="font-semibold">Clear Audio</h4>
+                                    <p className="text-sm text-gray-300">Use a headset or be in a quiet room to minimize background noise. Speak clearly at a natural pace.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onClick={handleStartSession} className="w-full px-6 py-3 font-semibold text-white bg-green-600 rounded-lg shadow-md hover:bg-green-700 transition">
                             Start Interview
                         </button>
                     </div>

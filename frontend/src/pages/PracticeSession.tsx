@@ -230,9 +230,7 @@ const PracticeSession: React.FC = () => {
   if (isPageLoading) return <LoadingSpinner />;
   if (error && !session) return <ErrorMessage message={error} />;
   if (!session || !currentQuestion) return <p>Session not found.</p>;
-  
-  const progress = ((session.currentQuestionIndex + 1) / session.questions.length) * 100;
-  
+    
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -267,14 +265,42 @@ const PracticeSession: React.FC = () => {
       <h1 className="text-3xl font-bold text-gray-800 mb-2">{session.jobTitle} Practice</h1>
       <p className="text-md text-gray-500 mb-6">at {session.company}</p>
 
-      <div className="mb-4">
-        <div className="flex justify-between mb-1">
-          <span className="text-base font-medium text-primary-700">Question {session.currentQuestionIndex + 1} of {session.questions.length}</span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-2.5">
-          <div className="bg-primary-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
-        </div>
+      {/* Step Progress Indicator */}
+      <div className="flex items-center w-full mb-8">
+        {session.questions.map((question, index) => {
+            const isCompleted = !!question.feedback;
+            const isCurrent = index === session.currentQuestionIndex;
+
+            return (
+                <React.Fragment key={index}>
+                    <div className="flex flex-col items-center">
+                        <button
+                            onClick={() => (isCompleted && !isCurrent) && navigateQuestion(index)}
+                            disabled={!isCompleted || isCurrent}
+                            aria-label={isCompleted ? `Review Question ${index + 1}` : `Question ${index + 1}`}
+                            aria-current={isCurrent ? 'step' : undefined}
+                            className={`flex items-center justify-center w-10 h-10 rounded-full text-lg font-bold transition-all duration-300 border-2
+                                ${isCurrent
+                                    ? 'bg-primary-600 text-white border-primary-600 scale-110 shadow-lg'
+                                    : isCompleted
+                                    ? 'bg-white text-primary-600 border-primary-600 cursor-pointer hover:bg-primary-50'
+                                    : 'bg-white text-gray-400 border-gray-300'
+                                }
+                            `}
+                        >
+                            {isCompleted && !isCurrent ? <Check className="w-6 h-6" /> : index + 1}
+                        </button>
+                    </div>
+                    {index < session.questions.length - 1 && (
+                        <div className={`flex-auto border-t-2 transition-colors duration-500 ease-in-out
+                            ${isCompleted ? 'border-primary-500' : 'border-gray-300'}`
+                        }></div>
+                    )}
+                </React.Fragment>
+            );
+        })}
       </div>
+
 
       <Card>
         {isLoading && <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg"><LoadingSpinner text="Evaluating answer..."/></div>}

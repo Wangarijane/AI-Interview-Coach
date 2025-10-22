@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
+import mammoth from "mammoth";
+import * as pdfjsLib from "pdfjs-dist";
+import workerSrc from "pdfjs-dist/build/pdf.worker.min.js?url";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
 import { createSession } from '../services/apiService';
 import { saveGuestSession } from '../services/localStorageService';
 import { generateQuestions } from '../services/geminiService';
@@ -9,12 +15,15 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
 import Card from '../components/common/Card';
 import { useAuth } from '../hooks/useAuth';
-import { Upload, Lightbulb, Mic, Type, Smile, UserCheck, BrainCircuit, Zap } from 'lucide-react';
+import { Upload, Lightbulb, Mic, Type, Smile, UserCheck, BrainCircuit, Zap, FileText, XCircle, AlertCircle, Rocket, Glasses, Search } from 'lucide-react';
 
 const personas = [
-    { name: 'Friendly & Encouraging', icon: Smile, description: 'A supportive interviewer for building confidence.' },
-    { name: 'Strict & Technical', icon: BrainCircuit, description: 'A no-nonsense interviewer who grills on details.' },
-    { name: 'HR Screener', icon: UserCheck, description: 'Focuses on behavioral and cultural fit questions.' },
+    { name: 'Friendly & Encouraging', icon: Smile, description: 'Supportive and positive, ideal for building confidence.' },
+    { name: 'Strict & Technical', icon: BrainCircuit, description: 'No-nonsense and direct, grills on technical details.' },
+    { name: 'HR Screener', icon: UserCheck, description: 'Focuses on behavioral questions and cultural fit.' },
+    { name: 'Fast-Paced Founder', icon: Rocket, description: 'High-energy, looking for passion and quick thinking.' },
+    { name: 'Thoughtful Senior Engineer', icon: Glasses, description: 'Calm and methodical, probes deep into concepts.' },
+    { name: 'Skeptical Manager', icon: Search, description: 'Cautious and wants proof, tests your confidence.' },
 ];
 
 const NewInterview: React.FC = () => {
@@ -26,22 +35,66 @@ const NewInterview: React.FC = () => {
   const [persona, setPersona] = useState(personas[0].name);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // State for resume processing
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [isProcessingResume, setIsProcessingResume] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const handleResumeFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRemoveResume = () => {
+    setResumeFile(null);
+    setResumeText('');
+    setResumeError(null);
+  };
+
+  const handleResumeFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file && file.type === 'text/plain') {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setResumeText(e.target?.result as string);
-        setError(null);
-      };
-      reader.readAsText(file);
-    } else {
-      setError('Please upload a valid .txt file for your resume.');
+    if (!file) return;
+
+    handleRemoveResume(); // Clear previous state
+    setIsProcessingResume(true);
+
+    try {
+        let text = '';
+        const fileExtension = file.name.split('.').pop()?.toLowerCase();
+        
+        if (fileExtension === 'txt') {
+            text = await file.text();
+        } else if (fileExtension === 'pdf') {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                // We have to use `any` here because the type from pdfjs-dist is complex
+                const pageText = (textContent.items as any[]).map(item => item.str).join(' ');
+                fullText += pageText + '\n';
+            }
+            text = fullText;
+        } else if (fileExtension === 'docx') {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer });
+            text = result.value;
+        } else {
+            throw new Error('Unsupported file type. Please upload a .txt, .pdf, or .docx file.');
+        }
+
+        if(!text.trim()) {
+            throw new Error('Could not extract text from file. It may be empty or image-based.');
+        }
+
+        setResumeText(text);
+        setResumeFile(file);
+    } catch (err: any) {
+        setResumeError(err.message || 'Failed to process resume file.');
+    } finally {
+        setIsProcessingResume(false);
+        event.target.value = ''; // Allow re-uploading the same file
     }
-    event.target.value = ''; // Reset file input
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -152,13 +205,37 @@ const NewInterview: React.FC = () => {
             <section className="space-y-4">
                 <h2 className="text-lg font-semibold text-gray-800">3. Personalization (Optional)</h2>
                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Your Resume (.txt file)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Your Resume (.txt, .pdf, .docx)</label>
                     <div className="flex items-center gap-4">
-                        <label htmlFor="resume-upload" className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                            <Upload className="h-5 w-5 mr-2" /> Upload Resume
+                        <label htmlFor="resume-upload" className={`cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 ${isProcessingResume ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                            <Upload className="h-5 w-5 mr-2" />
+                            {resumeFile ? 'Change Resume' : 'Upload Resume'}
                         </label>
-                        <input id="resume-upload" name="resume-upload" type="file" className="sr-only" onChange={handleResumeFileChange} accept=".txt" />
-                        {resumeText && <span className="text-sm text-green-600 font-medium">Resume uploaded successfully!</span>}
+                        <input id="resume-upload" name="resume-upload" type="file" className="sr-only" onChange={handleResumeFileChange} accept=".txt,.pdf,.docx,.doc" disabled={isProcessingResume}/>
+                        
+                        <div className="flex-1 min-w-0">
+                            {isProcessingResume && (
+                                <div className="flex items-center text-sm text-gray-500">
+                                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2"></div>
+                                    Processing file...
+                                </div>
+                            )}
+                            {!isProcessingResume && resumeFile && (
+                                <div className="flex items-center text-sm text-green-700 bg-green-50 p-2 rounded-md border border-green-200">
+                                    <FileText className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span className="truncate flex-1" title={resumeFile.name}>{resumeFile.name}</span>
+                                    <button type="button" onClick={handleRemoveResume} className="ml-2 text-red-500 hover:text-red-700" aria-label="Remove resume">
+                                        <XCircle className="h-5 w-5" />
+                                    </button>
+                                </div>
+                            )}
+                            {!isProcessingResume && resumeError && (
+                                <div className="flex items-center text-sm text-red-700 bg-red-50 p-2 rounded-md border border-red-200">
+                                    <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0"/>
+                                    <p>{resumeError}</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3 flex items-start">
                         <Lightbulb className="h-5 w-5 text-blue-500 mr-3 mt-1 flex-shrink-0" />
@@ -179,7 +256,7 @@ const NewInterview: React.FC = () => {
             </section>
 
             <div className="text-right pt-4">
-              <button type="submit" className="inline-flex items-center justify-center py-3 px-8 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50" disabled={isLoading}>
+              <button type="submit" className="inline-flex items-center justify-center py-3 px-8 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50" disabled={isLoading || isProcessingResume}>
                 <Zap className="w-5 h-5 mr-2" />
                 {isLoading ? 'Setting up...' : `Start ${mode === 'live' ? 'Live' : 'Classic'} Session`}
               </button>

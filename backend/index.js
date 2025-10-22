@@ -6,23 +6,38 @@ import { createSession, getSessions, getSession, updateSession, importSession } 
 import { generateQuestions, evaluateAnswer, generateLiveSessionReview } from './geminiService.js';
 import { authMiddleware } from './authMiddleware.js';
 
-// This check provides a clear error if the .env file is missing or misconfigured.
+// --- Pre-flight Checks and Configuration ---
+
+// A specific error message for a common local development setup issue.
+const CREDENTIALS_ERROR_MESSAGE = `Backend authentication with Google Cloud failed. This is a common issue during local development. 
+Please fix this by doing ONE of the following:
+1. (Recommended) Run 'gcloud auth application-default login' in your terminal and restart the backend.
+2. (Alternative) Create a service account, download its JSON key, and set the GOOGLE_APPLICATION_CREDENTIALS environment variable in your backend/.env file to point to the key file.
+See the README.md for more details.`;
+
+// Helper to check for the credentials error.
+const hasCredentialsError = (error) => error.message?.includes('Could not load the default credentials');
+
+
 if (!process.env.GCLOUD_PROJECT) {
     console.error("Google Cloud Project ID not found. Please set the GCLOUD_PROJECT environment variable in your backend/.env file.");
     process.exit(1);
 }
 
 // Initialize Firebase Admin SDK.
-// It automatically uses GOOGLE_APPLICATION_CREDENTIALS on Cloud Run.
-// For local dev, ensure you've run `gcloud auth application-default login`.
+// By not passing a credential, the SDK uses a default credential provider chain.
+// It checks for GOOGLE_APPLICATION_CREDENTIALS env var first, then falls back to
+// Application Default Credentials (set by `gcloud auth`).
 try {
     admin.initializeApp({
-        credential: admin.credential.applicationDefault(),
         projectId: process.env.GCLOUD_PROJECT,
     });
     console.log("Firebase Admin SDK initialized successfully.");
 } catch (error) {
-    console.error("Firebase Admin SDK initialization error:", error);
+    console.error("Firebase Admin SDK initialization error:", error.message);
+    if (hasCredentialsError(error)) {
+        console.error(CREDENTIALS_ERROR_MESSAGE);
+    }
     process.exit(1);
 }
 
@@ -44,6 +59,9 @@ apiRouter.get('/sessions', async (req, res) => {
     res.json(sessions);
   } catch (error) {
     console.error('Error fetching sessions:', error);
+    if (hasCredentialsError(error)) {
+      return res.status(500).json({ message: CREDENTIALS_ERROR_MESSAGE });
+    }
     // Check for a common Firestore indexing error.
     // The gRPC error code for a FAILED_PRECONDITION is 9.
     // This provides a much more helpful error message to the developer.
@@ -68,6 +86,9 @@ apiRouter.get('/sessions/:id', async (req, res) => {
     }
   } catch (error) {
     console.error(`Error fetching session ${req.params.id}:`, error);
+    if (hasCredentialsError(error)) {
+      return res.status(500).json({ message: CREDENTIALS_ERROR_MESSAGE });
+    }
     res.status(500).json({ message: 'Failed to fetch interview session.' });
   }
 });
@@ -105,6 +126,9 @@ apiRouter.post('/sessions', async (req, res) => {
 
   } catch (error) {
     console.error('Error creating session:', error);
+    if (hasCredentialsError(error)) {
+      return res.status(500).json({ message: CREDENTIALS_ERROR_MESSAGE });
+    }
     res.status(500).json({ message: error.message || 'Failed to create interview session.' });
   }
 });
@@ -122,6 +146,9 @@ apiRouter.put('/sessions/:id', async (req, res) => {
         res.json(updatedSession);
     } catch (error) {
         console.error(`Error updating session ${req.params.id}:`, error);
+        if (hasCredentialsError(error)) {
+          return res.status(500).json({ message: CREDENTIALS_ERROR_MESSAGE });
+        }
         res.status(500).json({ message: 'Failed to update session.' });
     }
 });
@@ -147,6 +174,9 @@ apiRouter.post('/sessions/:id/answer', async (req, res) => {
         res.json(updatedSession);
     } catch (error) {
         console.error(`Error submitting answer for session ${req.params.id}:`, error);
+        if (hasCredentialsError(error)) {
+          return res.status(500).json({ message: CREDENTIALS_ERROR_MESSAGE });
+        }
         res.status(500).json({ message: error.message || 'Failed to submit answer.' });
     }
 });
@@ -178,6 +208,9 @@ apiRouter.post('/sessions/:id/finish', async (req, res) => {
 
     } catch (error) {
         console.error(`Error finishing session ${req.params.id}:`, error);
+        if (hasCredentialsError(error)) {
+          return res.status(500).json({ message: CREDENTIALS_ERROR_MESSAGE });
+        }
         res.status(500).json({ message: error.message || 'Failed to finalize session.' });
     }
 });
@@ -194,6 +227,9 @@ apiRouter.post('/sessions/import', async (req, res) => {
         res.status(201).json(importedSession);
     } catch (error) {
         console.error('Error importing session:', error);
+        if (hasCredentialsError(error)) {
+          return res.status(500).json({ message: CREDENTIALS_ERROR_MESSAGE });
+        }
         res.status(500).json({ message: 'Failed to import session.' });
     }
 });

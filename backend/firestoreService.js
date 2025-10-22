@@ -23,11 +23,16 @@ export const createSession = async (userId, sessionData) => {
 
 export const getSessions = async (userId) => {
   const sessionsCollection = getUserSessionsCollection(userId);
-  const snapshot = await sessionsCollection.orderBy('createdAt', 'desc').get();
+  // Fetch all documents without ordering to avoid needing a composite index.
+  // This improves the out-of-the-box experience for developers.
+  const snapshot = await sessionsCollection.get();
   if (snapshot.empty) {
     return [];
   }
-  return snapshot.docs.map(doc => doc.data());
+  const sessions = snapshot.docs.map(doc => doc.data());
+  // Sort the sessions in-memory by creation date, descending.
+  sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return sessions;
 };
 
 export const getSession = async (userId, id) => {

@@ -17,20 +17,34 @@ const getAuthHeader = async () => {
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
+    // Clone the response before reading it to avoid "body already read" errors
+    const responseClone = response.clone();
+    let errorMessage = `Server Error (Status: ${response.status})`;
+    
     if (response.status === 404) {
-      throw new Error(`API endpoint not found (Error 404). Please ensure the backend server is running and the API URL in your .env file is correctly configured to point to the backend's API endpoint (e.g., http://localhost:8080/api).`);
-    }
-    if (response.status === 401 || response.status === 403) {
-      throw new Error("Authentication failed. Your session may have expired. Please sign in again.");
-    }
-    if (response.status >= 500) {
-        throw new Error("A server error occurred. We're working on fixing it! Please try again later.");
+      errorMessage = `API endpoint not found (404): The requested URL '${response.url}' was not found on the server. Please check that your backend is running and the VITE_API_URL in your frontend .env file is correct.`;
+    } else if (response.status === 401 || response.status === 403) {
+      errorMessage = "Authentication failed. Your session may have expired. Please sign in again.";
     }
     
-    const errorData = await response.json().catch(() => ({ 
-      message: `An unexpected error occurred. (Status: ${response.status})` 
-    }));
-    throw new Error(errorData.message || `An unknown error occurred.`);
+    try {
+        // Try to parse error as JSON first using the cloned response
+        const errorData = await responseClone.json();
+        errorMessage = errorData.message || errorMessage;
+    } catch (jsonError) {
+        // If JSON parsing fails, try to read as text
+        try {
+            const textError = await responseClone.text();
+            if (textError) {
+                errorMessage = `${errorMessage}. Response: ${textError.substring(0, 150)}`;
+            }
+        } catch (textError) {
+            // If both methods fail, use the generic error message
+            console.error('Could not read error response body:', textError);
+        }
+    }
+    
+    throw new Error(errorMessage);
   }
 
   const contentType = response.headers.get("content-type");
@@ -40,18 +54,30 @@ const handleResponse = async (response: Response) => {
   return null;
 };
 
-// A single, robust fetch wrapper to handle API calls, including network errors.
+// A single, robust fetch wrapper to handle API calls.
 const fetchWithHandling = async (url: string, options: RequestInit) => {
     try {
         const response = await fetch(url, options);
+        // handleResponse will throw an error for non-2xx responses.
         return await handleResponse(response);
     } catch (error) {
-        // This block catches network errors (e.g., connection refused), not HTTP errors from handleResponse.
-        if (error instanceof Error && error.message.startsWith('API endpoint not found')) {
-            throw error; // Re-throw our specific 404 error
+        // This 'catch' block now handles two main types of errors:
+        // 1. Errors thrown by handleResponse (for HTTP status codes like 4xx, 5xx).
+        // 2. Network-level errors from 'fetch' itself (e.g., DNS error, CORS, connection refused).
+
+        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+             // This generic message often indicates a network or CORS issue.
+             console.error("Network or CORS error:", error);
+             throw new Error(`Network Error: Could not connect to the backend at ${API_URL}. Please check:\n1. The backend server is running.\n2. The VITE_API_URL in your frontend .env file is correct.\n3. There are no CORS errors in the browser's developer console.\n4. Your device has an active internet connection.`);
         }
-        console.error("Network or Fetch API error:", error);
-        throw new Error("Network Error: Could not connect to the backend. Please ensure the backend server is running and there are no network issues (like a VPN or proxy) blocking the connection.");
+        
+        // Re-throw the structured error from handleResponse or other specific errors.
+        if (error instanceof Error) {
+            throw error;
+        }
+
+        // Fallback for any other unknown error types.
+        throw new Error("An unexpected error occurred during the API request.");
     }
 };
 
